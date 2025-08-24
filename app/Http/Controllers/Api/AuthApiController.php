@@ -51,40 +51,48 @@ class AuthApiController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email'    => ['required','email'],
-            'password' => ['required','string'],
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'string'],
         ]);
 
-        $user = User::where('email', $credentials['email'])->first();
+        $user = \App\Models\User::where('email', $credentials['email'])->first();
 
-        if (! $user || ! \Hash::check($credentials['password'], $user->password)) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
+        // ✉️ Email introuvable
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => ['Adresse e-mail inexistante.'],
             ]);
         }
 
-        // Block admins from this API
+        // 🔒 Mot de passe incorrect
+        if (! \Hash::check($credentials['password'], $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => ['Mot de passe incorrect.'],
+            ]);
+        }
+
+        // 🚫 Bloquer les admins
         if ($user->is_admin) {
             return response()->json([
                 'success' => false,
-                'message' => 'Admins are not allowed to use this API.',
+                'message' => 'Les administrateurs ne sont pas autorisés à utiliser cette API.',
             ], 403);
         }
 
-        // Optional: block banned/suspended users
+        // 🚫 Compte banni/suspendu
         if (in_array($user->status, ['banned', 'suspended'], true)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Your account is not allowed to sign in.',
+                'message' => 'Votre compte n’est pas autorisé à se connecter.',
                 'status'  => $user->status,
             ], 403);
         }
 
-        // 🔎 Get the CURRENT (active & not expired) subscription, if any
-        $current = UserSubscription::query()
+        // 🔎 Abonnement actuel (si existant)
+        $current = \App\Models\UserSubscription::query()
             ->forUser($user->id)
             ->current()
-            ->with(['plan:id,name,price,duration_days']) // small plan projection
+            ->with(['plan:id,name,price,duration_days'])
             ->latest('start_date')
             ->first();
 
@@ -94,14 +102,13 @@ class AuthApiController extends Controller
             'success' => true,
             'user' => $this->userPayload($user),
 
-            // NEW:
             'has_active_subscription' => (bool) $current,
             'subscription' => $current ? [
                 'id'              => $current->id,
-                'status'          => $current->status,         // 'active'
-                'is_current'      => $current->is_current,     // accessor
-                'remaining_days'  => $current->remaining_days, 
-                'payment_status'=> $current->payment_status,// accessor
+                'status'          => $current->status,
+                'is_current'      => $current->is_current,
+                'remaining_days'  => $current->remaining_days,
+                'payment_status'  => $current->payment_status,
                 'start_date'      => optional($current->start_date)->toIso8601String(),
                 'end_date'        => optional($current->end_date)->toIso8601String(),
                 'auto_renewal'    => (bool) $current->auto_renewal,
@@ -109,7 +116,7 @@ class AuthApiController extends Controller
                 'plan' => $current->relationLoaded('plan') && $current->plan ? [
                     'id'            => $current->plan->id,
                     'name'          => $current->plan->name,
-                    'price'         => (float) $current->plan->price,      // decimal cast -> float
+                    'price'         => (float) $current->plan->price,
                     'duration_days' => (int) $current->plan->duration_days,
                 ] : null,
             ] : null,
@@ -118,6 +125,7 @@ class AuthApiController extends Controller
             'access_token' => $token,
         ]);
     }
+
 
 
     /**

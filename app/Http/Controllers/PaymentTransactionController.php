@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class PaymentTransactionController extends Controller
 {
@@ -204,49 +205,94 @@ class PaymentTransactionController extends Controller
             'admin_comment'  => ['nullable','string','max:500'],
         ]);
 
-        // Update the transaction first
-        $attrs = [
-            'status'        => $validated['status'],
-            'admin_comment' => $validated['admin_comment'] ?? $payment_transaction->admin_comment,
-        ];
+        DB::transaction(function () use ($validated, $payment_transaction) {
 
-        if (in_array($validated['status'], [
-            PaymentTransaction::STATUS_COMPLETED,
-            PaymentTransaction::STATUS_FAILED,
-            PaymentTransaction::STATUS_CANCELLED,
-        ], true)) {
-            $attrs['processed_at'] = $payment_transaction->processed_at ?? now();
-            $attrs['reviewed_by']  = $payment_transaction->reviewed_by ?? optional(Auth::user())->id;
-            $attrs['reviewed_at']  = $payment_transaction->reviewed_at ?? now();
-        }
+            // 1) Update the transaction
+            $txAttrs = [
+                'status'        => $validated['status'],
+                'admin_comment' => $validated['admin_comment'] ?? $payment_transaction->admin_comment,
+            ];
 
-        if (!empty($validated['failure_reason'])) {
-            $attrs['failure_reason'] = $validated['failure_reason'];
-        }
+            if (in_array($validated['status'], [
+                PaymentTransaction::STATUS_COMPLETED,
+                PaymentTransaction::STATUS_FAILED,
+                PaymentTransaction::STATUS_CANCELLED,
+            ], true)) {
+                $txAttrs['processed_at'] = $payment_transaction->processed_at ?? now();
+                $txAttrs['reviewed_by']  = $payment_transaction->reviewed_by  ?? optional(Auth::user())->id;
+                $txAttrs['reviewed_at']  = $payment_transaction->reviewed_at  ?? now();
+            }
 
-        $payment_transaction->update($attrs);
+            if (!empty($validated['failure_reason'])) {
+                $txAttrs['failure_reason'] = $validated['failure_reason'];
+            }
 
-        // If the transaction is linked to a subscription, sync its payment_status
-        if (!empty($payment_transaction->subscription_id)) {
-            $sub = UserSubscription::find($payment_transaction->subscription_id);
-            if ($sub) {
-                // Map transaction status -> subscription payment_status
-                $map = [
-                    PaymentTransaction::STATUS_PENDING   => UserSubscription::PAY_PENDING,
-                    PaymentTransaction::STATUS_COMPLETED => UserSubscription::PAY_COMPLETED,
-                    PaymentTransaction::STATUS_FAILED    => UserSubscription::PAY_FAILED,
-                    PaymentTransaction::STATUS_CANCELLED => UserSubscription::PAY_FAILED, // or PAY_REFUNDED if you prefer
-                ];
+            $payment_transaction->update($txAttrs);
 
-                $newPayStatus = $map[$payment_transaction->status] ?? $sub->payment_status;
+            // 2) If linked to a subscription, sync both payment_status AND status/dates
+            if (!empty($payment_transaction->subscription_id)) {
+                $sub = UserSubscription::with('plan:id,duration_days')
+                    ->find($payment_transaction->subscription_id);
 
-                // Only update if changed
-                if ($newPayStatus !== $sub->payment_status) {
-                    $sub->payment_status = $newPayStatus;
-                    $sub->save();
+                if ($sub) {
+                    // Map transaction status -> subscription payment_status
+                    $payMap = [
+                        PaymentTransaction::STATUS_PENDING   => UserSubscription::PAY_PENDING,
+                        PaymentTransaction::STATUS_COMPLETED => UserSubscription::PAY_COMPLETED,
+                        PaymentTransaction::STATUS_FAILED    => UserSubscription::PAY_FAILED,
+                        PaymentTransaction::STATUS_CANCELLED => UserSubscription::PAY_FAILED, // or PAY_REFUNDED if you prefer
+                    ];
+
+                    $newPayStatus = $payMap[$payment_transaction->status] ?? $sub->payment_status;
+
+                    $subAttrs = [];
+                    if ($newPayStatus !== $sub->payment_status) {
+                        $subAttrs['payment_status'] = $newPayStatus;
+                    }
+
+                    // When payment COMPLETED → activate the subscription
+                    if ($payment_transaction->status === PaymentTransaction::STATUS_COMPLETED) {
+                        $subAttrs['status'] = UserSubscription::STATUS_ACTIVE;
+
+                        // Start now if not set
+                        $start = $sub->start_date ?: now();
+                        $subAttrs['start_date'] = $start;
+
+                        // End date: start + plan.duration_days (if not already set)
+                        if (empty($sub->end_date)) {
+                            $days = (int) optional($sub->plan)->duration_days;
+                            if ($days > 0) {
+                                // clone to avoid mutating $start
+                                $subAttrs['end_date'] = (clone $start)->addDays($days);
+                            }
+                        }
+
+                        // Copy amount/method/transaction if available
+                        if ($payment_transaction->amount !== null && $sub->amount_paid === null) {
+                            $subAttrs['amount_paid'] = $payment_transaction->amount;
+                        }
+                        if (!empty($payment_transaction->payment_method)) {
+                            $subAttrs['payment_method'] = $payment_transaction->payment_method;
+                        }
+                        $subAttrs['transaction_id'] = $payment_transaction->id;
+                    }
+
+                    // When payment FAILED or CANCELLED → cancel pending subscription
+                    if (in_array($payment_transaction->status, [
+                            PaymentTransaction::STATUS_FAILED,
+                            PaymentTransaction::STATUS_CANCELLED,
+                        ], true)) {
+                        if ($sub->status === UserSubscription::STATUS_PENDING) {
+                            $subAttrs['status'] = UserSubscription::STATUS_ACTIVE;
+                        }
+                    }
+
+                    if (!empty($subAttrs)) {
+                        $sub->update($subAttrs);
+                    }
                 }
             }
-        }
+        });
 
         return back()->with('success', 'Status updated.');
     }
