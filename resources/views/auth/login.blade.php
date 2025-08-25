@@ -15,6 +15,14 @@
       <link rel="stylesheet" href="/css/style.css">
       <!-- Responsive CSS -->
       <link rel="stylesheet" href="/css/responsive.css">
+      <style>
+        /* Right side panel */
+                .sign-in-page-image {
+                background: #000000;   /* your color */
+                color: #fff;           /* optional: makes text readable */
+                padding: 0;            /* avoid inner gaps */
+                }
+        </style>
    </head>
    <body>
       <!-- loader Start -->
@@ -34,8 +42,8 @@
                 <div class="col-md-5 bg-white sign-in-page-data">
                     <div class="sign-in-from">
 
-                    <h1 class="mb-0 text-center">Sign in</h1>
-                    <p class="text-center text-dark">Enter your email address and password to access the admin panel.</p>
+                    <h1 class="mb-0 text-center">Se connecter</h1>
+                    <p class="text-center text-dark">Entrez votre adresse e-mail et votre mot de passe pour accéder au panneau d'administration.</p>
 
                     @if(session('success'))
                         <div class="alert alert-success">{{ session('success') }}</div>
@@ -44,11 +52,11 @@
                         <div class="alert alert-info">{{ session('status') }}</div>
                     @endif
 
-                    <form method="POST" action="{{ route('login') }}" novalidate>
+                    <form method="POST" action="{{ url('/') }}" novalidate>
                         @csrf
 
                         <div class="form-group">
-                        <label for="email">Email address</label>
+                        <label for="email">Adresse email</label>
                         <input
                             type="email"
                             name="email"
@@ -66,11 +74,11 @@
                         </div>
 
                         <div class="form-group">
-                        <label for="password">Password</label>
+                        <label for="password">Mot de passe</label>
 
                         {{-- Show link only if the route exists --}}
                         @if (Route::has('password.request'))
-                            <a href="{{ route('password.request') }}" class="float-right">Forgot password?</a>
+                            <a href="{{ route('password.request') }}" class="float-right">Mot de passe oublié?</a>
                         @endif
 
                         <input
@@ -78,7 +86,7 @@
                             name="password"
                             id="password"
                             class="form-control mb-0 @error('password') is-invalid @enderror"
-                            placeholder="Password"
+                            placeholder="Mot de passe"
                             required
                             autocomplete="current-password"
                         >
@@ -87,18 +95,7 @@
                         @enderror
                         </div>
 
-                        <div class="d-inline-block w-100">
-                        <div class="custom-control custom-checkbox d-inline-block mt-2 pt-1">
-                            <input
-                            type="checkbox"
-                            class="custom-control-input"
-                            id="remember"
-                            name="remember"
-                            {{ old('remember') ? 'checked' : '' }}
-                            >
-                            <label class="custom-control-label" for="remember">Remember Me</label>
-                        </div>
-                        </div>
+                        
 
                         <div class="sign-info text-center">
                         <button type="submit" class="btn btn-primary d-block w-100 mb-2">Sign in</button>
@@ -110,14 +107,14 @@
 
                 <div class="col-md-7 text-center sign-in-page-image">
                     <div class="sign-in-detail text-white">
-                    <a class="sign-in-logo mb-5" href="#"><img src="/images/logo-full.png" class="img-fluid" alt="logo"></a>
+                    {{-- <a class="sign-in-logo mb-5" href="#"><img src="/images/logo-full.png" class="img-fluid" alt="logo"></a> --}}
                     <div class="owl-carousel" data-autoplay="true" data-loop="true" data-nav="false" data-dots="true" data-items="1" data-items-laptop="1" data-items-tab="1" data-items-mobile="1" data-items-mobile-sm="1" data-margin="0">
                         <div class="item">
-                        <img src="/images/login/1.png" class="img-fluid mb-4" alt="slide 1">
-                        <h4 class="mb-1 text-white">Find new friends</h4>
-                        <p>It is a long established fact that a reader will be distracted by the readable content.</p>
+                        <img src="/images/login/logo.jpg" class="img-fluid mb-4" alt="slide 1">
+                        {{-- <h4 class="mb-1 text-white">Find new friends</h4> --}}
+                        {{-- <p>It is a long established fact that a reader will be distracted by the readable content.</p> --}}
                         </div>
-                        <div class="item">
+                        {{-- <div class="item">
                         <img src="/images/login/1.png" class="img-fluid mb-4" alt="slide 2">
                         <h4 class="mb-1 text-white">Connect with the world</h4>
                         <p>It is a long established fact that a reader will be distracted by the readable content.</p>
@@ -126,7 +123,7 @@
                         <img src="/images/login/1.png" class="img-fluid mb-4" alt="slide 3">
                         <h4 class="mb-1 text-white">Create new events</h4>
                         <p>It is a long established fact that a reader will be distracted by the readable content.</p>
-                        </div>
+                        </div> --}}
                     </div>
                     </div>
                 </div>

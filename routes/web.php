@@ -18,8 +18,14 @@ Route::middleware('guest')->group(function () {
     Route::get('register', [AuthController::class, 'showRegisterForm'])->name('register');
     Route::post('register', [AuthController::class, 'register']);
 
-    Route::get('login', [AuthController::class, 'showLoginForm'])->name('login');
-    Route::post('login', [AuthController::class, 'login']);
+    Route::get('/', [AuthController::class, 'showLoginForm'])->name('login');
+
+    // Accept POST on "/"
+    Route::post('/', [AuthController::class, 'login'])->name('login.perform');
+
+    // (optional) keep classic /login working
+    Route::get('/login', fn() => redirect()->route('login'));
+    Route::post('/login', fn() => redirect()->route('login.perform'));
 });
 
 Route::middleware('auth')->group(function () {
@@ -78,4 +84,4 @@ Route::middleware('auth')->group(function () {
     Route::post('logout', [AuthController::class, 'logout'])->name('logout');
 });
 
-Route::get('/', fn () => view('welcome'));
+// Route::get('/', fn () => view('welcome'));
